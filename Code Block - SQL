@@ -1,0 +1,79 @@
+select
+      t1.dt,
+      month_act_num 'MAU',
+      new_num 'NEW USER'
+from
+(   select 
+          a.idate dt,
+          count(DISTINCT b.uid) AS month_act_num
+    from
+    ( 
+          select 
+                  substr(CAST(ds AS string),1,8) AS idate
+           from 
+                  beacon_olap.ieg_gameplus_gameplus_user_action_report_kk
+           where  
+                  substr(CAST(ds AS string),1,6) = cast(substring(from_unixtime(unix_timestamp(now() - interval 1 DAY), 'yyyyMMdd'),1,6) AS string)
+             and  operid = '1003000110601'
+           group by 
+                  substr(CAST(ds AS string),1,8)
+    )a
+    
+  left join 
+    (   
+          select 
+                  substr(CAST(ds AS string),1,8) AS idate,
+                  uid
+           from 
+                  beacon_olap.ieg_gameplus_gameplus_user_action_report_kk
+           where  
+                  substr(CAST(ds AS string),1,8) >=cast(substring(from_unixtime(unix_timestamp(now() - interval 30 DAY), 'yyyyMMdd'),1,8) AS string)
+             and  substr(CAST(ds AS string),1,6) = cast(substring(from_unixtime(unix_timestamp(now() - interval 1 DAY), 'yyyyMMdd'),1,6) AS string)
+             and  (substr(CAST(ds AS string),1,8) >='20210701'
+                   and  operid IN ('1003000110601',
+                                   '1101000110101',
+                                   '1003000110302',
+                                   '1102000110101'))
+              or  (substr(CAST(ds AS string),1,8) >='20211110'
+                  and operid IN ('1801000110101','1802000110101')
+                  )
+              or  (substr(CAST(ds AS string),1,8) >='20210701'
+                  and operid IN (	'1901000110101',
+                                  '1902000110101',
+                                  '1903000110101')
+                  )
+           group by 
+                    substr(CAST(ds AS string),1,8),
+                    uid
+    )b   on 1=1
+where to_timestamp(b.idate, 'yyyyMMdd') BETWEEN to_timestamp(CONCAT(substr(CAST(a.idate AS string),1,6),'01'), 'yyyyMMdd') AND to_timestamp(a.idate, 'yyyyMMdd')
+group by a.idate
+) t1
+
+left join --NEW USER
+(
+  select 
+          regtime dt,
+          count(DISTINCT uid) AS new_num
+   from 
+          beacon_olap.t_updw_dwd_kk_user_info_h
+   where  
+          substr(CAST(ds AS string),1,8) >= cast(substring(from_unixtime(unix_timestamp(now() - interval 1 DAY), 'yyyyMMdd'),1,8) AS string)
+    and   substr(regtime,1,6)= cast(substring(from_unixtime(unix_timestamp(now() - interval 1 DAY), 'yyyyMMdd'),1,6) AS string)
+    and   ((usertype IN ('1','4')
+            and  channel_app in ('CHShanxian', 'CHZhushou', 'CHJiasuqi', 'CHQiyou','qiyoujiasuqi')
+            and  regtime >='20211110')
+            or  (usertype = '1'
+                 and  (channel_app = 'CHNoknok' OR channel_app = 'CHWeb'))
+          )
+   group by   
+          regtime
+          
+) t2  
+    ON t1.dt=t2.dt
+
+order by t1.dt asc
+
+
+
+
